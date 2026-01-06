@@ -1,0 +1,19 @@
+schema_version = "1.0.0"
+
+id = "bb_texture_combine"
+version = "1.0.0"
+name = "BB Texture Combine"
+tagline = "Combine multiple textures with UDIM support"
+maintainer = "Blender Bob & Claude.ai"
+type = "add-on"
+
+tags = ["Material", "UV", "Texturing"]
+
+blender_version_min = "4.5.0"
+
+license = [
+  "SPDX:GPL-3.0-or-later",
+]
+
+[permissions]
+files = "Import/export texture files"
