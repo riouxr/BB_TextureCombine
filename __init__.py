@@ -1,7 +1,7 @@
 bl_info = {
     "name": "BB Texture Combine",
     "author": "Blender Bob & Claude.ai",
-    "version": (1, 0, 0),
+    "version": (1, 0, 1),
     "blender": (4, 5, 0),
     "location": "Shader Editor > N Panel > BB Texture Combine",
     "description": "Combine multiple textures with UDIM support",
@@ -185,7 +185,6 @@ def get_all_texture_nodes(material):
                 'image': node.image,
                 'node': node
             }
-            print(f"    Found texture: {socket_name} = {node.image.name}")
     
     return textures
 
@@ -345,16 +344,10 @@ def analyze_materials(objects):
             if not mat_slot.material:
                 continue
             
-            print(f"\nMaterial: {mat_slot.material.name} (on {obj.name})")
-            
             # Method 1: Get textures from Principled BSDF inputs (standard PBR workflow)
-            print("  Checking Principled BSDF inputs...")
             pbsdf_textures = get_principled_bsdf_textures(mat_slot.material)
-            for name in pbsdf_textures.keys():
-                print(f"    → {name}: {pbsdf_textures[name]['image'].name}")
             
             # Method 2: Get ALL texture nodes in material (catches Mix nodes, AO, etc.)
-            print("  Checking all texture nodes...")
             all_textures = get_all_texture_nodes(mat_slot.material)
             
             # Merge strategy: use all_textures (image names) as primary
@@ -373,7 +366,6 @@ def analyze_materials(objects):
                     # This texture isn't in our list yet, add it with BSDF socket name
                     merged_textures[socket_name] = tex_info
             
-            print(f"  Total textures found: {len(merged_textures)}")
             
             for socket_name, tex_info in merged_textures.items():
                 texture_map[socket_name].append({
@@ -385,8 +377,6 @@ def analyze_materials(objects):
     
     print(f"\n=== TEXTURE MAP SUMMARY ===")
     print(f"Total texture types: {len(texture_map)}")
-    for socket_name, entries in texture_map.items():
-        print(f"  {socket_name}: {len(entries)} entries")
     print("=" * 40 + "\n")
     
     return texture_map
@@ -505,9 +495,6 @@ def detect_source_udims_for_socket(objects, socket_name):
                                 obj_texture = node.image
                                 break
         
-        if obj_texture:
-            print(f"Object '{obj.name}' in tiles {sorted(obj_tiles)}: {obj_texture.name}")
-        
         # Map objects and textures to tiles
         for tile_num in obj_tiles:
             source_tiles.add(tile_num)
@@ -523,11 +510,7 @@ def detect_source_udims_for_socket(objects, socket_name):
     
     sorted_tiles = sorted(list(source_tiles))
     print(f"\n=== FINAL SOURCE UDIM MAPPING FOR {socket_name} ===")
-    for tile_num in sorted_tiles:
-        tex = tile_to_texture.get(tile_num)
-        tex_name = tex.name if tex else "NONE"
-        objs = [o.name for o in tile_to_objects.get(tile_num, [])]
-        print(f"UDIM {tile_num}: {tex_name} | Objects: {objs}")
+    print(f"Mapped {len(sorted_tiles)} UDIM tiles")
     print("=" * 40 + "\n")
     
     return sorted_tiles, tile_to_objects, tile_to_texture
@@ -555,8 +538,6 @@ def detect_source_udims(objects):
             continue
         
         obj_tiles = {primary_tile}
-        
-        print(f"Object '{obj.name}' uses UDIM tiles: {sorted(obj_tiles)}")
         
         # Get this object's texture
         obj_texture = None
@@ -587,11 +568,7 @@ def detect_source_udims(objects):
     
     sorted_tiles = sorted(list(source_tiles))
     print(f"\n=== FINAL SOURCE UDIM MAPPING ===")
-    for tile_num in sorted_tiles:
-        tex = tile_to_texture.get(tile_num)
-        tex_name = tex.name if tex else "NONE"
-        objs = [o.name for o in tile_to_objects.get(tile_num, [])]
-        print(f"UDIM {tile_num}: {tex_name} | Objects: {objs}")
+    print(f"Mapped {len(sorted_tiles)} UDIM tiles")
     print("=" * 40 + "\n")
     
     return sorted_tiles, tile_to_objects, tile_to_texture
@@ -610,27 +587,23 @@ def repack_uvs_udim_based(objects, target_udim_count):
     source_count = len(source_tiles)
     
     print(f"Repacking {source_count} source UDIM tiles into {target_udim_count} target tiles")
-    print(f"Source tiles: {source_tiles}")
     
     # Show texture mapping
     for tile_num in source_tiles:
         tex_name = source_tile_to_texture.get(tile_num)
         tex_name_str = tex_name.name if tex_name else "None"
         obj_names = [obj.name for obj in tile_objects.get(tile_num, [])]
-        print(f"  Source UDIM {tile_num}: texture={tex_name_str}, objects={obj_names}")
     
     # Step 2: Calculate grid layout
     tiles_per_target = math.ceil(source_count / target_udim_count)
     grid_cols = math.ceil(math.sqrt(tiles_per_target))
     grid_rows = math.ceil(tiles_per_target / grid_cols)
     
-    print(f"Grid per target UDIM: {grid_cols}x{grid_rows} = {tiles_per_target} slots")
     
     # Step 3: Calculate scale and cell size - NO PADDING
     cell_size = 1.0 / grid_cols
     scale = cell_size
     
-    print(f"Scale factor: {scale:.3f}, Cell size: {cell_size:.3f}, NO PADDING")
     
     # Calculate target UDIM tile layout
     target_tiles_per_row = math.ceil(math.sqrt(target_udim_count))
@@ -664,7 +637,6 @@ def repack_uvs_udim_based(objects, target_udim_count):
         source_u = (source_tile - 1001) % 10
         source_v = (source_tile - 1001) // 10
         
-        print(f"  Source UDIM {source_tile} → Target UDIM {target_tile_num} at cell [{cell_col},{cell_row}]")
         
         # Transform UVs for all objects using this source tile
         if source_tile in tile_objects:
@@ -924,13 +896,6 @@ def composite_textures_with_pil(objects, socket_name, texture_map, resolution, o
     sys.stdout.flush()
     
     print(f"Using PIL to composite {socket_name} textures...")
-    print(f"Source UDIMs to composite: {source_tiles}")
-    sys.stdout.flush()
-    
-    # Verify texture mapping
-    for tile_num in source_tiles:
-        if tile_num in source_tile_to_texture:
-            print(f"  Source UDIM {tile_num} → {source_tile_to_texture[tile_num].name}")
     sys.stdout.flush()
     
     # Load all source textures as PIL images using the provided mapping
@@ -941,7 +906,6 @@ def composite_textures_with_pil(objects, socket_name, texture_map, resolution, o
     udim_cache = {}  # image.name -> {tile_num: pil_image}
     
     for idx, tile_num in enumerate(source_tiles):
-        print(f"  [{idx+1}/{len(source_tiles)}] Loading UDIM {tile_num}...", end=" ", flush=True)
         
         if tile_num not in source_tile_to_texture:
             print("✗ No texture mapped")
@@ -974,8 +938,6 @@ def composite_textures_with_pil(objects, socket_name, texture_map, resolution, o
                 
                 # Make absolute path
                 tile_filepath = bpy.path.abspath(tile_filepath)
-                
-                print(f"Loading from disk: {tile_filepath}...", end=" ", flush=True)
                 
                 if not os.path.exists(tile_filepath):
                     print(f"✗ File not found")
@@ -1014,14 +976,12 @@ def composite_textures_with_pil(objects, socket_name, texture_map, resolution, o
                             elif other_img.mode != 'RGB':
                                 other_img = other_img.convert('RGB')
                             udim_cache[blender_image.name][other_tile] = other_img
-                            print(f"      + Cached tile {other_tile}")
             else:
                 # Regular single image - load directly from filepath if available
                 if blender_image.filepath:
                     tile_filepath = bpy.path.abspath(blender_image.filepath)
                     
                     if os.path.exists(tile_filepath):
-                        print(f"Loading from disk: {tile_filepath}...", end=" ", flush=True)
                         pil_img = Image.open(tile_filepath)
                     else:
                         print(f"✗ File not found: {tile_filepath}")
@@ -1101,7 +1061,7 @@ def composite_textures_with_pil(objects, socket_name, texture_map, resolution, o
     # Composite: place each source UDIM into target grid
     target_tiles_per_row = math.ceil(math.sqrt(target_udim_count))
     
-    print(f"\nCompositing {source_count} tiles into grid...")
+    print(f"Compositing {source_count} tiles...")
     
     for source_idx, source_tile in enumerate(source_tiles):
         print(f"  [{source_idx+1}/{source_count}] UDIM {source_tile}...", end=" ", flush=True)
@@ -1139,7 +1099,6 @@ def composite_textures_with_pil(objects, socket_name, texture_map, resolution, o
         
         if target_tile_num in tile_images:
             tile_images[target_tile_num].paste(src_resized, (px, py))
-            print(f"✓ → Target {target_tile_num} cell[{cell_col},{cell_row}] @({px},{py})")
         else:
             print(f"✗ Target tile {target_tile_num} not found!")
     
@@ -1175,18 +1134,29 @@ def load_udim_image_from_tiles(tile_paths, socket_name, resolution, base_name, s
     # Determine if this is a color or non-color texture
     is_color_data = socket_name in ['Base Color', 'Emission Color', 'Emission', 'Subsurface Color']
     
+    # Smart detection based on socket/image name if not a standard socket
+    if not is_color_data:
+        name_lower = socket_name.lower().replace(' ', '')
+        if any(x in name_lower for x in ['basecolor', 'diffuse', 'albedo', 'emission']):
+            is_color_data = True
+        elif any(x in name_lower for x in ['normal', 'roughness', 'metallic', 'metalness', 'ao', 'ambient', 'occlusion', 'alpha', 'bump', 'height']):
+            is_color_data = False
+    
     # Get original color space from source textures for this specific socket type
-    original_colorspace = 'sRGB'  # Default for color data
-    if is_color_data:
-        # Look at the source textures for THIS specific socket type
-        if socket_name in texture_map:
-            for obj_textures in texture_map[socket_name]:
-                if 'image' in obj_textures and obj_textures['image']:
-                    source_img = obj_textures['image']
+    original_colorspace = 'sRGB' if is_color_data else 'Non-Color'
+    if socket_name in texture_map:
+        for obj_textures in texture_map[socket_name]:
+            if 'image' in obj_textures and obj_textures['image']:
+                source_img = obj_textures['image']
+                try:
                     if hasattr(source_img, 'colorspace_settings'):
-                        original_colorspace = source_img.colorspace_settings.name
-                        print(f"  Detected original color space for {socket_name}: {original_colorspace}")
-                        break
+                        source_colorspace = source_img.colorspace_settings.name
+                        if source_colorspace and source_colorspace.strip():  # Only use if valid and not empty
+                            original_colorspace = source_colorspace
+                            break
+                except:
+                    # Invalid colorspace value (e.g., from FBX import), skip
+                    pass
     
     # Get tile numbers
     tile_numbers = sorted(tile_paths.keys())
@@ -1207,16 +1177,13 @@ def load_udim_image_from_tiles(tile_paths, socket_name, resolution, base_name, s
     # Configure color space
     if not is_color_data:
         baked_image.colorspace_settings.name = 'Non-Color'
-        print(f"  Set color space: Non-Color (data texture)")
     else:
         # Preserve original color space for color data, with validation
         if original_colorspace and original_colorspace.strip():
             baked_image.colorspace_settings.name = original_colorspace
-            print(f"  Set color space: {original_colorspace} (preserved from source)")
         else:
             # Fallback to sRGB if colorspace is empty/invalid
             baked_image.colorspace_settings.name = 'sRGB'
-            print(f"  Set color space: sRGB (fallback, source had empty colorspace)")
     
     # Set up UDIM tiles
     for idx, tile_number in enumerate(tile_numbers):
@@ -1403,14 +1370,11 @@ def bake_combined_texture(objects, socket_name, texture_map, resolution, num_udi
             if mat_slot.material in materials_with_setup:
                 continue
             
-            print(f"  Processing material: {mat_slot.material.name} on {obj.name}")
-            
             # Setup emission for this material
             setup_info = setup_emission_for_baking(mat_slot.material, socket_name, texture_map)
             if setup_info:
                 emission_setups.append((mat_slot.material, setup_info))
                 materials_with_setup.append(mat_slot.material)
-                print(f"    ✓ Set up emission (texture: {setup_info['texture_node'].image.name})")
             else:
                 print(f"    ✗ WARNING: Could not setup emission - no texture found for {socket_name}")
             
@@ -1537,7 +1501,6 @@ def create_combined_material(baked_images, texture_map, base_name):
         print("ERROR: No source material found")
         return None
     
-    print(f"Reusing existing material: {source_material.name}")
     
     if not source_material.use_nodes:
         print("ERROR: Source material doesn't use nodes")
@@ -1545,34 +1508,50 @@ def create_combined_material(baked_images, texture_map, base_name):
     
     nodes = source_material.node_tree.nodes
     
-    print(f"Available baked images: {list(baked_images.keys())}")
-    
     # Update all texture nodes to use the new combined images
-    print(f"Scanning {len(nodes)} nodes for texture updates...")
     for node in nodes:
         if node.type == 'TEX_IMAGE' and node.image:
             old_image_name = node.image.name.split('.')[0].replace('_', ' ').title()
-            old_colorspace = node.image.colorspace_settings.name
-            print(f"  Node has image: {node.image.name} → normalized to: '{old_image_name}'")
-            print(f"    Original colorspace: {old_colorspace}")
+            
+            # Safely read colorspace (FBX imports may have invalid values)
+            try:
+                old_colorspace = node.image.colorspace_settings.name
+            except:
+                old_colorspace = ''
             
             # Try to find matching baked image
             if old_image_name in baked_images:
                 new_image = baked_images[old_image_name]
-                new_colorspace = new_image.colorspace_settings.name
-                print(f"    ✓ MATCH! Updating to {new_image.name}")
-                print(f"    New image colorspace (before fix): {new_colorspace}")
+                try:
+                    new_colorspace = new_image.colorspace_settings.name
+                except:
+                    new_colorspace = ''
+                
+                # Determine correct colorspace
+                target_colorspace = old_colorspace
+                
+                # If old colorspace is empty/invalid, use smart detection
+                if not old_colorspace or old_colorspace.strip() == '':
+                    # Detect based on texture name
+                    img_name_lower = node.image.name.lower()
+                    
+                    if any(x in img_name_lower for x in ['normal', 'bump', 'height', 'displacement']):
+                        target_colorspace = 'Non-Color'
+                    elif any(x in img_name_lower for x in ['roughness', 'metallic', 'metalness', 'ao', 'ambient', 'occlusion', 'alpha', 'opacity']):
+                        target_colorspace = 'Non-Color'
+                    elif any(x in img_name_lower for x in ['basecolor', 'diffuse', 'albedo', 'color', 'emission']):
+                        target_colorspace = 'sRGB'
+                    else:
+                        target_colorspace = 'sRGB'  # Safe default
                 
                 # Fix colorspace if different
-                if new_colorspace != old_colorspace:
+                if new_colorspace != target_colorspace:
                     try:
-                        new_image.colorspace_settings.name = old_colorspace
-                        print(f"    → Fixed colorspace to: {old_colorspace}")
+                        new_image.colorspace_settings.name = target_colorspace
                     except Exception as e:
                         print(f"    ✗ Could not set colorspace: {e}")
                 
                 node.image = new_image
-                print(f"    ✓ Updated - final colorspace: {node.image.colorspace_settings.name}")
             else:
                 print(f"    ✗ No match found for '{old_image_name}' (keeping original)")
     
@@ -1602,13 +1581,11 @@ class BB_OT_CombineTextures(bpy.types.Operator):
                 try:
                     # Try to pack if not already packed
                     img.pack()
-                    print(f"Packed: {img.name}")
                 except:
                     # If can't pack, try to reload from filepath
                     if img.filepath:
                         try:
                             img.reload()
-                            print(f"Reloaded: {img.name}")
                         except:
                             pass
         
@@ -1772,8 +1749,11 @@ class BB_OT_CombineTextures(bpy.types.Operator):
                     # Find and update texture nodes
                     for node in nodes:
                         if node.type == 'TEX_IMAGE' and node.image:
-                            # Save original colorspace
-                            old_colorspace = node.image.colorspace_settings.name
+                            # Safely read original colorspace (FBX imports may have invalid values)
+                            try:
+                                old_colorspace = node.image.colorspace_settings.name
+                            except:
+                                old_colorspace = ''
                             
                             # Strategy 1: Try to match by checking direct connections
                             matched = False
@@ -1803,12 +1783,37 @@ class BB_OT_CombineTextures(bpy.types.Operator):
                             
                             # Update the image and preserve colorspace
                             if matched and new_image:
-                                # Fix colorspace if different
-                                if new_image.colorspace_settings.name != old_colorspace:
+                                # Determine correct colorspace
+                                target_colorspace = old_colorspace
+                                
+                                # If old colorspace is empty/invalid, use smart detection
+                                if not old_colorspace or old_colorspace.strip() == '':
+                                    # Detect based on texture name
+                                    img_name_lower = node.image.name.lower()
+                                    
+                                    if any(x in img_name_lower for x in ['normal', 'bump', 'height', 'displacement']):
+                                        target_colorspace = 'Non-Color'
+                                    elif any(x in img_name_lower for x in ['roughness', 'metallic', 'metalness', 'ao', 'ambient', 'occlusion', 'alpha', 'opacity']):
+                                        target_colorspace = 'Non-Color'
+                                    elif any(x in img_name_lower for x in ['basecolor', 'diffuse', 'albedo', 'color', 'emission']):
+                                        target_colorspace = 'sRGB'
+                                    else:
+                                        # Default fallback based on connection
+                                        if matched and socket_name:
+                                            if socket_name in ['Normal', 'Roughness', 'Metallic', 'Specular', 'Alpha']:
+                                                target_colorspace = 'Non-Color'
+                                            else:
+                                                target_colorspace = 'sRGB'
+                                        else:
+                                            target_colorspace = 'sRGB'  # Safe default
+                                
+                                # Apply colorspace if different
+                                if new_image.colorspace_settings.name != target_colorspace:
                                     try:
-                                        new_image.colorspace_settings.name = old_colorspace
+                                        new_image.colorspace_settings.name = target_colorspace
                                     except:
                                         pass
+                                
                                 node.image = new_image
         
         self.report({'INFO'}, f"Textures saved to: {output_dir}")

@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "bb_texture_combine"
-version = "1.0.0"
+version = "1.0.1"
 name = "BB Texture Combine"
 tagline = "Combine multiple textures with UDIM support"
 maintainer = "Blender Bob & Claude.ai"
