@@ -1,7 +1,7 @@
 bl_info = {
     "name": "BB Texture Combine",
     "author": "Blender Bob & Claude.ai",
-    "version": (1, 0, 1),
+    "version": (1, 0, 2),
     "blender": (4, 5, 0),
     "location": "Shader Editor > N Panel > BB Texture Combine",
     "description": "Combine multiple textures with UDIM support",
