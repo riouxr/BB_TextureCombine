@@ -33,42 +33,37 @@ def get_udim_tile_from_uv(u, v):
     return 1001 + (tile_v * 10) + tile_u
 
 
-def get_object_primary_udim(obj):
+def get_object_udims(obj):
     """
-    Determine which UDIM tile an object primarily belongs to based on 
-    the center point of its UV bounding box. Much faster than counting all UVs.
+    Get ALL UDIM tiles that an object uses.
+    Returns a set of UDIM tile numbers.
     """
     if obj.type != 'MESH' or not obj.data.uv_layers:
-        return None
+        return set()
     
     uv_layer = obj.data.uv_layers.active
     if not uv_layer:
-        return None
+        return set()
     
-    # Get UV bounding box
     if not obj.data.loops:
-        return None
+        return set()
     
-    first_uv = uv_layer.data[obj.data.loops[0].index].uv
-    min_u = max_u = first_uv.x
-    min_v = max_v = first_uv.y
-    
+    udim_tiles = set()
     for loop in obj.data.loops:
         uv = uv_layer.data[loop.index].uv
-        min_u = min(min_u, uv.x)
-        max_u = max(max_u, uv.x)
-        min_v = min(min_v, uv.y)
-        max_v = max(max_v, uv.y)
+        udim = get_udim_tile_from_uv(uv.x, uv.y)
+        udim_tiles.add(udim)
     
-    # Calculate center point
-    center_u = (min_u + max_u) / 2.0
-    center_v = (min_v + max_v) / 2.0
-    
-    # Determine tile from center point
-    tile_u = math.floor(center_u)
-    tile_v = math.floor(center_v)
-    
-    return 1001 + (tile_v * 10) + tile_u
+    return udim_tiles
+
+
+def get_object_primary_udim(obj):
+    """
+    Get the lowest UDIM tile number that an object uses.
+    This is used for backward compatibility with code that expects a single UDIM.
+    """
+    udims = get_object_udims(obj)
+    return min(udims) if udims else None
 
 
 class BBTextureCombineProperties(bpy.types.PropertyGroup):
@@ -433,12 +428,10 @@ def detect_source_udims_for_socket(objects, socket_name):
         if not uv_layer:
             continue
         
-        # Determine which UDIM tile this object primarily belongs to
-        primary_tile = get_object_primary_udim(obj)
-        if not primary_tile:
+        # Get ALL UDIM tiles this object uses (handles objects spanning multiple UDIMs)
+        obj_tiles = get_object_udims(obj)
+        if not obj_tiles:
             continue
-        
-        obj_tiles = {primary_tile}
         
         # Get this object's texture FOR THIS SPECIFIC SOCKET
         obj_texture = None
@@ -532,12 +525,10 @@ def detect_source_udims(objects):
         if not uv_layer:
             continue
         
-        # Determine which UDIM tile this object primarily belongs to
-        primary_tile = get_object_primary_udim(obj)
-        if not primary_tile:
+        # Get ALL UDIM tiles this object uses (handles objects spanning multiple UDIMs)
+        obj_tiles = get_object_udims(obj)
+        if not obj_tiles:
             continue
-        
-        obj_tiles = {primary_tile}
         
         # Get this object's texture
         obj_texture = None
